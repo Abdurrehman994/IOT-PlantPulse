@@ -16,8 +16,7 @@ import {
   collection,
   query,
   orderBy,
-  startAt,
-  endAt,
+  where,
   onSnapshot,
   Timestamp,
 } from "firebase/firestore";
@@ -51,39 +50,55 @@ export default function Chart() {
   const [showStats, setShowStats] = useState(true);
   const [last3Hours, setLast3Hours] = useState(true);
 
+  /* --------------------------------------------------
+     RESET DATE RANGE WHEN LAST 3 HOURS IS ENABLED
+  -------------------------------------------------- */
   useEffect(() => {
+    if (last3Hours) {
+      setStartDate(null);
+      setEndDate(null);
+    }
+  }, [last3Hours]);
+
+  /* --------------------------------------------------
+     FIRESTORE REAL-TIME QUERY
+  -------------------------------------------------- */
+  useEffect(() => {
+    const colRef = collection(db, "mqtt_data");
     let q;
 
     if (last3Hours) {
       const now = new Date();
-      const from = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+      const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
 
       q = query(
-        collection(db, "mqtt_data"),
-        orderBy("timestamp"),
-        startAt(Timestamp.fromDate(from)),
-        endAt(Timestamp.fromDate(now))
+        colRef,
+        where("timestamp", ">=", Timestamp.fromDate(threeHoursAgo)),
+        where("timestamp", "<=", Timestamp.fromDate(now)),
+        orderBy("timestamp")
       );
     } else if (startDate && endDate) {
       q = query(
-        collection(db, "mqtt_data"),
-        orderBy("timestamp"),
-        startAt(Timestamp.fromDate(startDate)),
-        endAt(Timestamp.fromDate(endDate))
+        colRef,
+        where("timestamp", ">=", Timestamp.fromDate(startDate)),
+        where("timestamp", "<=", Timestamp.fromDate(endDate)),
+        orderBy("timestamp")
       );
     } else {
-      q = query(collection(db, "mqtt_data"), orderBy("timestamp", "desc"));
+      q = query(colRef, orderBy("timestamp"));
     }
 
     const unsub = onSnapshot(q, (snap) => {
-      const data = [];
-      snap.forEach((doc) => data.push(doc.data()));
-      setHistory(data.reverse());
+      const data = snap.docs.map((doc) => doc.data());
+      setHistory(data);
     });
 
     return () => unsub();
   }, [startDate, endDate, last3Hours]);
 
+  /* --------------------------------------------------
+     STATISTICS CALCULATION
+  -------------------------------------------------- */
   const calcStats = (arr) => {
     if (!arr.length) return {};
     return {
@@ -108,8 +123,11 @@ export default function Chart() {
     [history]
   );
 
+  /* --------------------------------------------------
+     CHART DATA
+  -------------------------------------------------- */
   const chartData = {
-    labels: history.map((d) => new Date(d.timestamp).toLocaleTimeString()),
+    labels: history.map((d) => d.timestamp?.toDate().toLocaleTimeString()),
     datasets: [
       visible.temperature && {
         label: "Temperature (°C)",
@@ -118,7 +136,6 @@ export default function Chart() {
         backgroundColor: "rgba(239,68,68,0.25)",
         fill: true,
         tension: 0.45,
-        cubicInterpolationMode: "monotone",
         borderWidth: 3,
         pointRadius: 0,
         yAxisID: "y",
@@ -130,7 +147,6 @@ export default function Chart() {
         backgroundColor: "rgba(59,130,246,0.25)",
         fill: true,
         tension: 0.45,
-        cubicInterpolationMode: "monotone",
         borderWidth: 3,
         pointRadius: 0,
         yAxisID: "y",
@@ -142,7 +158,6 @@ export default function Chart() {
         backgroundColor: "rgba(16,185,129,0.25)",
         fill: true,
         tension: 0.45,
-        cubicInterpolationMode: "monotone",
         borderWidth: 3,
         pointRadius: 0,
         yAxisID: "y1",
@@ -150,6 +165,9 @@ export default function Chart() {
     ].filter(Boolean),
   };
 
+  /* --------------------------------------------------
+     CHART OPTIONS
+  -------------------------------------------------- */
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -172,7 +190,9 @@ export default function Chart() {
     },
   };
 
-  // CSV Export
+  /* --------------------------------------------------
+     CSV EXPORT
+  -------------------------------------------------- */
   const exportCSV = () => {
     const headers = ["Timestamp"];
     if (visible.temperature) headers.push("Temperature");
@@ -180,7 +200,7 @@ export default function Chart() {
     if (visible.pressure) headers.push("Pressure");
 
     const rows = history.map((d) => {
-      const row = [new Date(d.timestamp).toLocaleString()];
+      const row = [d.timestamp?.toDate().toLocaleString()];
       if (visible.temperature) row.push(d.sensors?.temperature ?? "");
       if (visible.moisture) row.push(d.sensors?.moisture ?? "");
       if (visible.pressure) row.push(d.sensors?.pressure ?? "");
@@ -188,10 +208,15 @@ export default function Chart() {
     });
 
     const csv = [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    saveAs(blob, "plantpulse_data.csv");
+    saveAs(
+      new Blob([csv], { type: "text/csv;charset=utf-8" }),
+      "plantpulse_data.csv"
+    );
   };
 
+  /* --------------------------------------------------
+     RENDER
+  -------------------------------------------------- */
   return (
     <section className="section">
       <h2>Sensor Dashboard</h2>
