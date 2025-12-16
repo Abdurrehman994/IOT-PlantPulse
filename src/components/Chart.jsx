@@ -51,13 +51,6 @@ export default function Chart() {
   const [showStats, setShowStats] = useState(true);
   const [last3Hours, setLast3Hours] = useState(true);
 
-  // Alert thresholds
-  const thresholds = {
-    temperature: { min: 18, max: 30 },
-    moisture: { min: 20, max: 80 },
-    pressure: { min: 980, max: 1050 },
-  };
-
   useEffect(() => {
     let q;
 
@@ -143,7 +136,7 @@ export default function Chart() {
         yAxisID: "y",
       },
       visible.pressure && {
-        label: "Pressure (hPa)",
+        label: "Pressure (kPa)",
         data: history.map((d) => d.sensors?.pressure ?? null),
         borderColor: "#10b981",
         backgroundColor: "rgba(16,185,129,0.25)",

@@ -1,28 +1,47 @@
 import React, { useEffect, useState } from "react";
-import "./Alerts.css"; // optional for styling
+import "./Alerts.css";
+
+// Static thresholds (outside component)
+const thresholds = {
+  temperature: {
+    min: 10,
+    max: 30,
+    label: "Temperature (°C)",
+  },
+  moisture: {
+    min: 30,
+    label: "Soil Moisture (%)",
+  },
+  pressure: {
+    label: "Pressure (kPa)",
+  },
+};
 
 export default function Alerts({ sensors }) {
   const [alerts, setAlerts] = useState([]);
 
-  // Define thresholds for alerts
-  const thresholds = {
-    temperature: { min: 18, max: 30, label: "Temperature (°C)" },
-    moisture: { min: 20, max: 80, label: "Soil Moisture (%)" },
-    pressure: { min: 980, max: 1050, label: "Pressure (hPa)" },
-  };
-
   useEffect(() => {
+    if (!sensors) return;
+
     const newAlerts = [];
 
     Object.keys(thresholds).forEach((key) => {
       const value = sensors[key];
       const { min, max, label } = thresholds[key];
-      if (value < min) newAlerts.push(`${label} is too low! (${value})`);
-      if (value > max) newAlerts.push(`${label} is too high! (${value})`);
+
+      if (value === undefined || value === null) return;
+
+      if (min !== undefined && value < min) {
+        newAlerts.push(`${label} is too low! (${value})`);
+      }
+
+      if (max !== undefined && value > max) {
+        newAlerts.push(`${label} is too high! (${value})`);
+      }
     });
 
     setAlerts(newAlerts);
-  }, [sensors]);
+  }, [sensors]); // ✅ ESLint happy
 
   if (!alerts.length) return null;
 
