@@ -67,26 +67,27 @@ export default function Chart() {
     const colRef = collection(db, "mqtt_data");
     let q;
 
-    if (last3Hours) {
-      const now = new Date();
-      const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    const now = new Date();
+    let startTime;
 
-      q = query(
-        colRef,
-        where("timestamp", ">=", Timestamp.fromDate(threeHoursAgo)),
-        where("timestamp", "<=", Timestamp.fromDate(now)),
-        orderBy("timestamp")
-      );
+    if (last3Hours) {
+      // Show last 3 hours
+      startTime = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    } else if (!startDate && !endDate) {
+      // Default: show last 6 hours
+      startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000);
     } else if (startDate && endDate) {
-      q = query(
-        colRef,
-        where("timestamp", ">=", Timestamp.fromDate(startDate)),
-        where("timestamp", "<=", Timestamp.fromDate(endDate)),
-        orderBy("timestamp")
-      );
-    } else {
-      q = query(colRef, orderBy("timestamp"));
+      startTime = startDate;
     }
+
+    const endTime = last3Hours || (!startDate && !endDate) ? now : endDate;
+
+    q = query(
+      colRef,
+      where("timestamp", ">=", Timestamp.fromDate(startTime)),
+      where("timestamp", "<=", Timestamp.fromDate(endTime)),
+      orderBy("timestamp")
+    );
 
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map((doc) => doc.data());
