@@ -1,0 +1,7 @@
+.plant-animation rect.stem {
+  transition: height 1s ease, y 1s ease;
+}
+
+.plant-animation ellipse.leaf {
+  transition: cy 1s ease;
+}
