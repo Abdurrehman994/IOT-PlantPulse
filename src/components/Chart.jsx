@@ -48,7 +48,7 @@ export default function Chart() {
   });
 
   const [showStats, setShowStats] = useState(true);
-  const [last3Hours, setLast3Hours] = useState(true);
+  const [last3Hours, setLast3Hours] = useState(false);
 
   /* --------------------------------------------------
      RESET DATE RANGE WHEN LAST 3 HOURS IS ENABLED
