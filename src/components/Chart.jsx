@@ -40,6 +40,7 @@ export default function Chart() {
   const [history, setHistory] = useState([]);
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
+  const [showStats, setShowStats] = useState(true);
 
   const [visible, setVisible] = useState({
     temperature: true,
@@ -47,61 +48,48 @@ export default function Chart() {
     pressure: true,
   });
 
-  const [showStats, setShowStats] = useState(true);
-  const [last3Hours, setLast3Hours] = useState(false);
+  /* --------------------------------------------------
+     TIMESTAMP NORMALIZER
+  -------------------------------------------------- */
+  const normalizeDate = (ts) => {
+    if (!ts) return null;
+    if (typeof ts.toDate === "function") return ts.toDate();
+    if (ts instanceof Date) return ts;
+    if (typeof ts === "number") return new Date(ts);
+    if (typeof ts === "string") return new Date(ts);
+    return null;
+  };
 
   /* --------------------------------------------------
-     RESET DATE RANGE WHEN LAST 3 HOURS IS ENABLED
+     FIRESTORE QUERY
+     - All data by default
+     - Date range when selected
   -------------------------------------------------- */
   useEffect(() => {
-    if (last3Hours) {
-      setStartDate(null);
-      setEndDate(null);
-    }
-  }, [last3Hours]);
+    const constraints = [orderBy("timestamp")];
 
-  /* --------------------------------------------------
-     FIRESTORE REAL-TIME QUERY
-  -------------------------------------------------- */
-  useEffect(() => {
-    const colRef = collection(db, "mqtt_data");
-    let q;
-
-    const now = new Date();
-    let startTime;
-
-    if (last3Hours) {
-      // Show last 3 hours
-      startTime = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-    } else if (!startDate && !endDate) {
-      // Default: show last 6 hours
-      startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000);
-    } else if (startDate && endDate) {
-      startTime = startDate;
+    if (startDate) {
+      constraints.push(where("timestamp", ">=", Timestamp.fromDate(startDate)));
     }
 
-    const endTime = last3Hours || (!startDate && !endDate) ? now : endDate;
+    if (endDate) {
+      constraints.push(where("timestamp", "<=", Timestamp.fromDate(endDate)));
+    }
 
-    q = query(
-      colRef,
-      where("timestamp", ">=", Timestamp.fromDate(startTime)),
-      where("timestamp", "<=", Timestamp.fromDate(endTime)),
-      orderBy("timestamp")
-    );
+    const q = query(collection(db, "mqtt_data"), ...constraints);
 
     const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((doc) => doc.data());
-      setHistory(data);
+      setHistory(snap.docs.map((d) => d.data()));
     });
 
     return () => unsub();
-  }, [startDate, endDate, last3Hours]);
+  }, [startDate, endDate]);
 
   /* --------------------------------------------------
-     STATISTICS CALCULATION
+     STATISTICS
   -------------------------------------------------- */
   const calcStats = (arr) => {
-    if (!arr.length) return {};
+    if (!arr.length) return { min: "-", max: "-", avg: "-" };
     return {
       min: Math.min(...arr),
       max: Math.max(...arr),
@@ -112,13 +100,13 @@ export default function Chart() {
   const stats = useMemo(
     () => ({
       temperature: calcStats(
-        history.map((d) => d.sensors?.temperature).filter(Boolean)
+        history.map((d) => d.sensors?.temperature).filter(Number)
       ),
       moisture: calcStats(
-        history.map((d) => d.sensors?.moisture).filter(Boolean)
+        history.map((d) => d.sensors?.moisture).filter(Number)
       ),
       pressure: calcStats(
-        history.map((d) => d.sensors?.pressure).filter(Boolean)
+        history.map((d) => d.sensors?.pressure).filter(Number)
       ),
     }),
     [history]
@@ -128,7 +116,9 @@ export default function Chart() {
      CHART DATA
   -------------------------------------------------- */
   const chartData = {
-    labels: history.map((d) => d.timestamp?.toDate().toLocaleTimeString()),
+    labels: history.map(
+      (d) => normalizeDate(d.timestamp)?.toLocaleString() ?? ""
+    ),
     datasets: [
       visible.temperature && {
         label: "Temperature (°C)",
@@ -136,19 +126,17 @@ export default function Chart() {
         borderColor: "#ef4444",
         backgroundColor: "rgba(239,68,68,0.25)",
         fill: true,
-        tension: 0.45,
-        borderWidth: 3,
+        tension: 0.4,
         pointRadius: 0,
         yAxisID: "y",
       },
       visible.moisture && {
-        label: "Soil Moisture (%)",
+        label: "Moisture (%)",
         data: history.map((d) => d.sensors?.moisture ?? null),
         borderColor: "#3b82f6",
         backgroundColor: "rgba(59,130,246,0.25)",
         fill: true,
-        tension: 0.45,
-        borderWidth: 3,
+        tension: 0.4,
         pointRadius: 0,
         yAxisID: "y",
       },
@@ -158,8 +146,7 @@ export default function Chart() {
         borderColor: "#10b981",
         backgroundColor: "rgba(16,185,129,0.25)",
         fill: true,
-        tension: 0.45,
-        borderWidth: 3,
+        tension: 0.4,
         pointRadius: 0,
         yAxisID: "y1",
       },
@@ -201,7 +188,7 @@ export default function Chart() {
     if (visible.pressure) headers.push("Pressure");
 
     const rows = history.map((d) => {
-      const row = [d.timestamp?.toDate().toLocaleString()];
+      const row = [normalizeDate(d.timestamp)?.toLocaleString() ?? ""];
       if (visible.temperature) row.push(d.sensors?.temperature ?? "");
       if (visible.moisture) row.push(d.sensors?.moisture ?? "");
       if (visible.pressure) row.push(d.sensors?.pressure ?? "");
@@ -211,7 +198,7 @@ export default function Chart() {
     const csv = [headers.join(","), ...rows].join("\n");
     saveAs(
       new Blob([csv], { type: "text/csv;charset=utf-8" }),
-      "plantpulse_data.csv"
+      "sensor_data.csv"
     );
   };
 
@@ -243,32 +230,25 @@ export default function Chart() {
             />
             Show Stats
           </label>
-
-          <label>
-            <input
-              type="checkbox"
-              checked={last3Hours}
-              onChange={() => setLast3Hours(!last3Hours)}
-            />
-            Last 3 Hours
-          </label>
         </div>
 
-        <button onClick={exportCSV} className="csv-btn">
-          📤 <span className="glow">Export CSV</span>
-        </button>
+        <button onClick={exportCSV}>📤 Export CSV</button>
       </div>
 
-      {!last3Hours && (
-        <div className="date-filters">
-          <DatePicker
-            selected={startDate}
-            onChange={setStartDate}
-            showTimeSelect
-          />
-          <DatePicker selected={endDate} onChange={setEndDate} showTimeSelect />
-        </div>
-      )}
+      <div className="date-filters">
+        <DatePicker
+          selected={startDate}
+          onChange={setStartDate}
+          showTimeSelect
+          placeholderText="Start date"
+        />
+        <DatePicker
+          selected={endDate}
+          onChange={setEndDate}
+          showTimeSelect
+          placeholderText="End date"
+        />
+      </div>
 
       {showStats && (
         <div className="stats">
@@ -287,7 +267,7 @@ export default function Chart() {
         </div>
       )}
 
-      <div className="chart-glow" style={{ height: 450 }}>
+      <div style={{ height: 450 }}>
         <Line data={chartData} options={chartOptions} />
       </div>
     </section>
