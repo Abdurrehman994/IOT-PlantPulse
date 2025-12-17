@@ -232,7 +232,9 @@ export default function Chart() {
           </label>
         </div>
 
-        <button onClick={exportCSV}>📤 Export CSV</button>
+        <button onClick={exportCSV} className="export-btn">
+          📤 Export CSV
+        </button>
       </div>
 
       <div className="date-filters">
